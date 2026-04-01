@@ -1,0 +1,100 @@
+name: pipeline-debugger
+version: "1.0.0"
+description: >
+  A real-world OpenEnv environment where AI agents debug broken data pipelines.
+  Simulates common data engineering failures across 3 difficulty levels.
+  Agent uses inspect/fix/run actions and is graded on output correctness (0.0-1.0).
+
+author: pipeline-debugger
+tags:
+  - openenv
+  - data-engineering
+  - debugging
+  - real-world
+  - pandas
+
+tasks:
+  - id: easy_type_mismatch
+    difficulty: easy
+    description: Fix a type cast bug causing wrong revenue totals in a sales pipeline
+    max_steps: 12
+    expected_score_range: [0.80, 0.95]
+
+  - id: medium_silent_filter_bug
+    difficulty: medium
+    description: Fix a silent date boundary bug with no error messages in a monthly report
+    max_steps: 18
+    expected_score_range: [0.50, 0.70]
+
+  - id: hard_cascade_bugs
+    difficulty: hard
+    description: Fix 3 cascading bugs across 4 pipeline stages in correct order
+    max_steps: 25
+    expected_score_range: [0.20, 0.45]
+
+observation_space:
+  task_id: string
+  task_description: string
+  pipeline_stages: list
+  input_data_sample: list
+  current_output_sample: list
+  expected_output_sample: list
+  expected_schema: dict
+  logs: list
+  actions_taken: list
+  steps_remaining: int
+  current_score: float
+
+action_space:
+  action_type:
+    type: enum
+    values: [inspect_stage, fix_transform, fix_schema, fix_filter, reorder_stages, run_pipeline, submit]
+  stage_id: string (optional)
+  new_code: string (optional)
+  column_name: string (optional)
+  new_type: string (optional)
+  new_condition: string (optional)
+  new_order: list (optional)
+  reasoning: string (optional)
+
+reward_range: [-1.0, 1.0]
+reward_components:
+  schema_match:        "0.0 to 0.30 — output schema correctness"
+  data_match:          "0.0 to 0.50 — output data value correctness"
+  bug_fix_score:       "0.0 to 0.20 — confirmed bug fixes in code"
+  crash_penalty:       "-0.10 per pipeline crash"
+  efficiency_penalty:  "-0.02 per excess run_pipeline call"
+
+api:
+  endpoints:
+    - method: POST
+      path: /reset
+      description: Start a new episode
+    - method: POST
+      path: /step
+      description: Take an action
+    - method: GET
+      path: /state
+      description: Get current state snapshot
+    - method: GET
+      path: /health
+      description: Health check
+
+runtime:
+  language: python
+  python_version: "3.11"
+  port: 7860
+  inference_script: inference.py
+  dependencies:
+    - pandas>=2.0.0
+    - fastapi>=0.100.0
+    - uvicorn>=0.20.0
+    - openai>=1.0.0
+    - pydantic>=2.0.0
+    - pyyaml>=6.0
+
+huggingface:
+  space_type: docker
+  sdk: docker
+  tags:
+    - openenv
