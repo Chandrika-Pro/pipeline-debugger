@@ -1,0 +1,58 @@
+{
+  "model": "meta-llama/Llama-3.3-70B-Instruct",
+  "api_base_url": "https://router.huggingface.co/v1",
+  "tasks": [
+    "easy",
+    "medium",
+    "hard"
+  ],
+  "results": [
+    {
+      "task": "easy",
+      "final_score": 1.0,
+      "steps_used": 5,
+      "total_reward": 0.98,
+      "grader_breakdown": {
+        "final_score": 1.0,
+        "schema_score": 0.3,
+        "data_score": 0.5,
+        "bug_fix_score": 0.2,
+        "schema_reason": "\u2713 Column names match. \u2713 2/2 column types correct.",
+        "data_reason": "\u2713 Data accuracy: 100.0% (6/6 cells correct).",
+        "bug_reason": "\u2713 Type cast bug fixed."
+      }
+    },
+    {
+      "task": "medium",
+      "final_score": 1.0,
+      "steps_used": 6,
+      "total_reward": 1.1,
+      "grader_breakdown": {
+        "final_score": 1.0,
+        "schema_score": 0.3,
+        "data_score": 0.5,
+        "bug_fix_score": 0.2,
+        "schema_reason": "\u2713 Column names match. \u2713 2/2 column types correct.",
+        "data_reason": "\u2713 Data accuracy: 100.0% (6/6 cells correct).",
+        "bug_reason": "\u2713 Date boundary bug fixed."
+      }
+    },
+    {
+      "task": "hard",
+      "final_score": 0.9333,
+      "steps_used": 6,
+      "total_reward": 0.9833,
+      "grader_breakdown": {
+        "final_score": 0.9333,
+        "schema_score": 0.3,
+        "data_score": 0.5,
+        "bug_fix_score": 0.1333,
+        "schema_reason": "\u2713 Column names match. \u2713 4/4 column types correct.",
+        "data_reason": "\u2713 Data accuracy: 100.0% (16/16 cells correct).",
+        "bug_reason": "\u2713 Column rename bug fixed. \u2717 Join key bug still present. \u2713 Threshold bug fixed."
+      }
+    }
+  ],
+  "average_score": 0.9778,
+  "elapsed_sec": 22.5
+}
