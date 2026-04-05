@@ -1,3 +1,14 @@
+---
+title: Pipeline Debugger OpenEnv
+emoji: 🔧
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+tags:
+  - openenv
+---
+
 # 🔧 Pipeline Debugger — OpenEnv Environment
 
 An OpenEnv-compliant environment where AI agents debug **broken real-world data pipelines**.
