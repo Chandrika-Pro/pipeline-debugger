@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "pipeline-debugger"
+version = "1.0.0"
+description = "A real-world OpenEnv environment for debugging data pipelines"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "numpy>=1.24.0",
+]
+
+[project.urls]
+Homepage = "https://huggingface.co/spaces/Chandrika23/pipeline-debugger"
