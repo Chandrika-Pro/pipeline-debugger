@@ -15,7 +15,11 @@ dependencies = [
     "pydantic>=2.0.0",
     "pyyaml>=6.0",
     "numpy>=1.24.0",
+    "openenv-core>=0.2.0",
 ]
+
+[project.scripts]
+server = "app:app"
 
 [project.urls]
 Homepage = "https://huggingface.co/spaces/Chandrika23/pipeline-debugger"
