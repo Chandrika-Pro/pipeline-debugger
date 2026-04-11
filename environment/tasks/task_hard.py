@@ -1,36 +1,39 @@
 """
-task_hard.py — The Cascade (3 bugs, each hiding the next)
+task_hard.py — The Cascade (4 bugs, each hiding the next)
 
 STORY:
 A logistics company tracks shipments. Their pipeline:
-1. Loads shipment records
-2. Joins with warehouse location data
-3. Classifies shipments as domestic/international
-4. Produces a summary report by region
+1. Loads and casts shipment records
+2. Standardizes column names
+3. Joins with warehouse location data
+4. Classifies shipments as domestic/international
+5. Produces a summary report by region
 
-THREE BUGS (each causes the next):
-Bug 1 (stage_2): Column rename uses wrong name → 'warehouse_id' renamed to 'wh_id'
-                  but stage_3 join expects 'warehouse_id'
-                  → Stage 3 join produces all NULLs
+FOUR BUGS (each causes the next):
+Bug 1 (stage_2): Wrong column rename — 'warehouse_id' → 'wh_id'
+                  breaks stage_3 join completely
 
-Bug 2 (stage_3): Even if join worked, the join key is wrong ('id' vs 'warehouse_id')
-                  → NULLs in region column
+Bug 2 (stage_3): Wrong join key — uses 'wh_id' but warehouses has 'warehouse_id'
+                  even after fixing bug 1, join logic is still wrong
 
-Bug 3 (stage_4): Classifier uses wrong threshold — classifies as 'international'
-                  if distance > 500, but should be > 1000
-                  → Wrong domestic/international split in final report
+Bug 3 (stage_4): Wrong distance threshold — > 500 instead of > 1000
+                  causes wrong domestic/international classification
+
+Bug 4 (stage_4): Wrong column used for classification — uses 'distance_km'
+                  but after join some rows have NULL distance due to bug 2
+                  agent must also add a fillna() to handle NULLs
 
 AGENT MUST:
-1. Realize stage_3 fails because stage_2 renamed a column badly → fix stage_2
-2. Then realize stage_3 has wrong join key → fix stage_3
-3. Then realize stage_4 threshold is wrong → fix stage_4
-Must fix in order — fixing stage_4 first won't help if stage_3 still produces NULLs.
+1. Fix stage_2 column rename
+2. Fix stage_3 join key
+3. Fix stage_4 threshold AND handle NULLs
+Must fix in order — later fixes are masked by earlier bugs.
 
 DIFFICULTY: Hard
-- 3 bugs across 4 stages
-- Each bug is partially masked by the next
-- No single error message tells the full story
-- Requires reasoning about data flow
+- 4 bugs across 5 stages
+- Cascading failures
+- NULL propagation adds extra complexity
+- No single error message reveals all bugs
 """
 
 import pandas as pd
@@ -40,33 +43,24 @@ from environment.pipeline import Pipeline, PipelineStage
 def create_task() -> dict:
 
     # ── Input Data ──────────────────────────────────────────
-
-    # Shipment records
     shipments = pd.DataFrame({
-        "shipment_id":  [1001, 1002, 1003, 1004, 1005, 1006],
-        "warehouse_id": ["WH01", "WH02", "WH01", "WH03", "WH02", "WH03"],
-        "destination":  ["Mumbai", "London", "Delhi", "New York", "Chennai", "Dubai"],
-        "weight_kg":    [10.5, 25.0, 8.0, 50.0, 15.0, 30.0],
-        "distance_km":  [200, 7000, 350, 12000, 180, 5000],
+        "shipment_id":  [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008],
+        "warehouse_id": ["WH01", "WH02", "WH01", "WH03", "WH02", "WH03", "WH01", "WH02"],
+        "destination":  ["Mumbai", "London", "Delhi", "New York", "Chennai", "Dubai", "Pune", "Berlin"],
+        "weight_kg":    [10.5, 25.0, 8.0, 50.0, 15.0, 30.0, 12.0, 22.0],
+        "distance_km":  [200, 7000, 350, 12000, 180, 5000, 150, 6500],
+        "priority":     ["standard", "express", "standard", "express",
+                         "standard", "express", "standard", "express"],
     })
 
-    # Warehouse locations (to be joined)
-    warehouses = pd.DataFrame({
-        "warehouse_id": ["WH01", "WH02", "WH03"],
-        "region":       ["North India", "South India", "West India"],
-        "city":         ["Delhi", "Chennai", "Mumbai"],
-    })
-
-    # We store warehouses as a second input — merged at pipeline start
     input_data = shipments.copy()
-    # We'll pass warehouses via pipeline metadata
 
     # ── Pipeline Stages ──────────────────────────────────────
 
     stage1 = PipelineStage(
         stage_id="stage_1",
         stage_type="transform",
-        description="Load shipment data and cast types",
+        description="Load shipment data and cast numeric types",
         code="""
 df['weight_kg'] = df['weight_kg'].astype(float)
 df['distance_km'] = df['distance_km'].astype(float)
@@ -75,44 +69,51 @@ result = df
         inputs=[]
     )
 
-    # BUG 1: Renames warehouse_id to wh_id — breaks stage_3 join
+    # BUG 1: Wrong rename — wh_id breaks downstream join
     stage2 = PipelineStage(
         stage_id="stage_2",
         stage_type="transform",
         description="Standardize column names for downstream processing",
         code="""
-df = df.rename(columns={'warehouse_id': 'wh_id'})   # BUG: should keep as 'warehouse_id'
+df = df.rename(columns={'warehouse_id': 'wh_id'})  # BUG 1: should keep as 'warehouse_id'
 result = df
 """,
         inputs=["stage_1"]
     )
 
-    # BUG 2: Join key is wrong — uses 'id' which doesn't exist
-    # Even without Bug 1, this join key is wrong → all NULLs in region
+    # BUG 2: Wrong join key — left_on uses 'warehouse_id' but after bug1 it is 'wh_id'
     stage3 = PipelineStage(
         stage_id="stage_3",
         stage_type="transform",
-        description="Join shipments with warehouse region data",
+        description="Join shipments with warehouse region and city data",
         code="""
 warehouses = pd.DataFrame({
     'warehouse_id': ['WH01', 'WH02', 'WH03'],
     'region':       ['North India', 'South India', 'West India'],
     'city':         ['Delhi', 'Chennai', 'Mumbai'],
+    'hub_type':     ['primary', 'primary', 'secondary'],
 })
-# BUG: left_on should be 'warehouse_id' (or 'wh_id' after bug1), right_on correct
+# BUG 2: left_on='warehouse_id' but column was renamed to 'wh_id' in stage_2
 result = df.merge(warehouses, left_on='warehouse_id', right_on='warehouse_id', how='left')
 """,
         inputs=["stage_2"]
     )
 
-    # BUG 3: Threshold wrong — > 500 instead of > 1000
+    # BUG 3: Wrong threshold (>500 instead of >1000)
+    # BUG 4: No fillna for NULLs caused by broken join
     stage4 = PipelineStage(
         stage_id="stage_4",
         stage_type="transform",
-        description="Classify shipments as domestic or international based on distance",
+        description="Classify shipments as domestic or international, then calculate revenue",
         code="""
+# BUG 3: threshold should be > 1000, not > 500
+# BUG 4: missing fillna(0) for distance_km NULLs from broken join
 df['shipment_type'] = df['distance_km'].apply(
-    lambda x: 'international' if x > 500 else 'domestic'   # BUG: should be > 1000
+    lambda x: 'international' if x > 500 else 'domestic'
+)
+df['shipping_cost'] = df.apply(
+    lambda row: row['weight_kg'] * (15 if row['shipment_type'] == 'international' else 5),
+    axis=1
 )
 result = df
 """,
@@ -122,11 +123,12 @@ result = df
     stage5 = PipelineStage(
         stage_id="stage_5",
         stage_type="aggregate",
-        description="Summarize shipment counts and weight by region and type",
+        description="Summarize by region and shipment type: count, weight, cost",
         code="""
 result = df.groupby(['region', 'shipment_type']).agg(
     shipment_count=('shipment_id', 'count'),
-    total_weight=('weight_kg', 'sum')
+    total_weight=('weight_kg', 'sum'),
+    total_cost=('shipping_cost', 'sum')
 ).reset_index().sort_values(['region', 'shipment_type']).reset_index(drop=True)
 """,
         inputs=["stage_4"]
@@ -138,21 +140,31 @@ result = df.groupby(['region', 'shipment_type']).agg(
     )
 
     # ── Expected Output ──────────────────────────────────────
-    # After fixing all 3 bugs:
-    # Domestic (<=1000km): 1001(200), 1003(350), 1005(180) → WH01,WH01,WH02
-    # International (>1000km): 1002(7000), 1004(12000), 1006(5000) → WH02,WH03,WH03
+    # After fixing ALL bugs:
+    # Domestic (<=1000km): 1001(200,WH01,North), 1003(350,WH01,North),
+    #                      1005(180,WH02,South), 1007(150,WH01,North)
+    # International (>1000km): 1002(7000,WH02,South), 1004(12000,WH03,West),
+    #                           1006(5000,WH03,West), 1008(6500,WH02,South)
+    #
+    # North India domestic: 1001(10.5), 1003(8.0), 1007(12.0) → count=3, weight=30.5, cost=152.5
+    # South India domestic: 1005(15.0) → count=1, weight=15.0, cost=75.0
+    # South India international: 1002(25.0), 1008(22.0) → count=2, weight=47.0, cost=705.0
+    # West India international: 1004(50.0), 1006(30.0) → count=2, weight=80.0, cost=1200.0
+
     expected_output = pd.DataFrame({
         "region":         ["North India", "South India", "South India", "West India"],
         "shipment_type":  ["domestic",    "domestic",    "international", "international"],
-        "shipment_count": [2,             1,             1,               2],
-        "total_weight":   [18.5,          15.0,          25.0,            80.0],
+        "shipment_count": [3,             1,             2,               2],
+        "total_weight":   [30.5,          15.0,          47.0,            80.0],
+        "total_cost":     [152.5,         75.0,          705.0,           1200.0],
     })
 
     expected_schema = {
-        "region": "object",
-        "shipment_type": "object",
+        "region":         "object",
+        "shipment_type":  "object",
         "shipment_count": "int64",
-        "total_weight": "float64",
+        "total_weight":   "float64",
+        "total_cost":     "float64",
     }
 
     return {
@@ -160,11 +172,11 @@ result = df.groupby(['region', 'shipment_type']).agg(
         "title": "Fix the Cascading Bugs in Logistics Shipment Pipeline",
         "description": (
             "A logistics company's shipment reporting pipeline is producing wrong output. "
-            "There are multiple bugs: a column rename is breaking a downstream join, "
-            "the join key is incorrect causing NULL regions, and the distance threshold "
-            "for classifying domestic vs international shipments is wrong. "
-            "You must find and fix all bugs. Note: fixing later stages won't help "
-            "if earlier bugs are still present — order matters."
+            "There are multiple bugs: a column rename breaks a downstream join causing NULL regions, "
+            "the join key is incorrect, the distance threshold for domestic vs international "
+            "classification is wrong, and NULL values from the broken join need to be handled. "
+            "Fix all bugs in the correct order — fixing later stages first won't help "
+            "if earlier bugs still corrupt the data."
         ),
         "difficulty": "hard",
         "pipeline": pipeline,
@@ -175,6 +187,10 @@ result = df.groupby(['region', 'shipment_type']).agg(
             "stage_3_wrong_join_key",
             "stage_4_wrong_threshold",
         ],
-        "hint": "Run the pipeline first. Then inspect each stage's output carefully. Think about what data flows from one stage to the next.",
+        "hint": (
+            "Run the pipeline first. Inspect stage outputs carefully. "
+            "Think about what data flows from one stage to the next. "
+            "Fix bugs from earliest stage to latest."
+        ),
         "max_steps": 30,
     }
