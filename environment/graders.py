@@ -87,7 +87,6 @@ def score_data(
         return 0.0, "No output data to compare."
 
     if set(actual.columns) != set(expected.columns):
-        # Can't compare data if schema is wrong
         return 0.0, "Cannot compare data — column names don't match."
 
     # Reorder columns to match
@@ -119,10 +118,8 @@ def score_data(
 
     for col in expected.columns:
         if expected[col].dtype in [object, "string"]:
-            # String comparison
             matches = (actual[col].astype(str) == expected[col].astype(str)).sum()
         else:
-            # Numeric comparison with tolerance
             try:
                 diff = (actual[col].astype(float) - expected[col].astype(float)).abs()
                 matches = (diff <= tolerance * expected[col].astype(float).abs().clip(lower=1)).sum()
@@ -146,8 +143,6 @@ def score_bugs_fixed(
     """
     Check if specific bugs have been fixed by inspecting pipeline stage code.
     Returns (score 0.0-0.2, reason string)
-
-    We check the bug indicators in the stage code.
     """
     if not bugs:
         return 0.2, "No bugs to check."
@@ -156,18 +151,26 @@ def score_bugs_fixed(
     reasons = []
 
     for bug in bugs:
+
+        # ── EASY TASK ──────────────────────────────────────
         if bug == "stage_2_wrong_type_cast":
-            # Easy task: stage_2 should cast price as float not int
+            # stage_2 should cast price as float not int
             code = pipeline.stages.get("stage_2", None)
             if code:
-                if "astype(float)" in code.code and "astype(int)" not in code.code.split("price")[1].split("\n")[0]:
+                price_line = ""
+                for line in code.code.split("\n"):
+                    if "price" in line and "astype" in line:
+                        price_line = line
+                        break
+                if "astype(float)" in price_line:
                     fixed_count += 1
                     reasons.append("✓ Type cast bug fixed.")
                 else:
                     reasons.append("✗ Type cast bug still present.")
 
+        # ── MEDIUM TASK ────────────────────────────────────
         elif bug == "stage_3_wrong_date_boundary":
-            # Medium task: stage_3 should use 2024-02-01 not 2024-01-31
+            # stage_3 should use 2024-02-01 not 2024-01-31
             code = pipeline.stages.get("stage_3", None)
             if code:
                 if "2024-01-31" not in code.code:
@@ -176,7 +179,9 @@ def score_bugs_fixed(
                 else:
                     reasons.append("✗ Date boundary still uses 2024-01-31.")
 
+        # ── HARD TASK ──────────────────────────────────────
         elif bug == "stage_2_wrong_column_rename":
+            # stage_2 should NOT rename warehouse_id to wh_id
             code = pipeline.stages.get("stage_2", None)
             if code:
                 if "wh_id" not in code.code:
@@ -186,6 +191,7 @@ def score_bugs_fixed(
                     reasons.append("✗ Column rename bug still present (wh_id).")
 
         elif bug == "stage_3_wrong_join_key":
+            # stage_3 join should use warehouse_id correctly
             code = pipeline.stages.get("stage_3", None)
             if code:
                 if "warehouse_id" in code.code and "wh_id" not in code.code:
@@ -195,6 +201,7 @@ def score_bugs_fixed(
                     reasons.append("✗ Join key bug still present.")
 
         elif bug == "stage_4_wrong_threshold":
+            # stage_4 threshold should be > 1000 not > 500
             code = pipeline.stages.get("stage_4", None)
             if code:
                 if "> 1000" in code.code and "> 500" not in code.code:
@@ -202,6 +209,16 @@ def score_bugs_fixed(
                     reasons.append("✓ Threshold bug fixed.")
                 else:
                     reasons.append("✗ Threshold bug still uses > 500.")
+
+        elif bug == "stage_4_null_handling":
+            # stage_4 should handle NULLs with fillna
+            code = pipeline.stages.get("stage_4", None)
+            if code:
+                if "fillna" in code.code or "dropna" in code.code or "notnull" in code.code:
+                    fixed_count += 1
+                    reasons.append("✓ NULL handling added.")
+                else:
+                    reasons.append("✗ NULL handling still missing.")
 
     score = round(0.2 * (fixed_count / len(bugs)), 4)
     return score, " ".join(reasons)
@@ -222,18 +239,18 @@ def grade(
     - breakdown dict with details
     """
     schema_score, schema_reason = score_schema(actual_output, expected_output, expected_schema)
-    data_score, data_reason = score_data(actual_output, expected_output)
-    bug_score, bug_reason = score_bugs_fixed(pipeline, bugs)
+    data_score, data_reason     = score_data(actual_output, expected_output)
+    bug_score, bug_reason       = score_bugs_fixed(pipeline, bugs)
 
     final_score = round(schema_score + data_score + bug_score, 4)
-    final_score = min(final_score, 1.0)  # Cap at 1.0
+    final_score = min(final_score, 1.0)
 
     return final_score, {
-        "final_score": final_score,
-        "schema_score": schema_score,
-        "data_score": data_score,
+        "final_score":   final_score,
+        "schema_score":  schema_score,
+        "data_score":    data_score,
         "bug_fix_score": bug_score,
         "schema_reason": schema_reason,
-        "data_reason": data_reason,
-        "bug_reason": bug_reason,
+        "data_reason":   data_reason,
+        "bug_reason":    bug_reason,
     }
