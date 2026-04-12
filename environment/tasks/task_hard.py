@@ -182,11 +182,12 @@ result = df.groupby(['region', 'shipment_type']).agg(
         "pipeline": pipeline,
         "expected_output": expected_output,
         "expected_schema": expected_schema,
-        "bugs": [
-            "stage_2_wrong_column_rename",
-            "stage_3_wrong_join_key",
-            "stage_4_wrong_threshold",
-        ],
+       "bugs": [
+    "stage_2_wrong_column_rename",
+    "stage_3_wrong_join_key",
+    "stage_4_wrong_threshold",
+    "stage_4_null_handling",
+],
         "hint": (
             "Run the pipeline first. Inspect stage outputs carefully. "
             "Think about what data flows from one stage to the next. "
