@@ -4,6 +4,7 @@ description: >
   A real-world OpenEnv environment where AI agents debug broken data pipelines.
   Simulates common data engineering failures across 3 difficulty levels.
   Agent uses inspect/fix/run actions and is graded on output correctness (0.0-1.0).
+  Features partial rewards at every step, deterministic graders, and cascading bug mechanics.
 
 author: pipeline-debugger
 tags:
@@ -12,25 +13,47 @@ tags:
   - debugging
   - real-world
   - pandas
+  - reinforcement-learning
 
 tasks:
   - id: easy_type_mismatch
     difficulty: easy
-    description: Fix a type cast bug causing wrong revenue totals in a sales pipeline
-    max_steps: 12
-    expected_score_range: [0.80, 0.95]
+    description: >
+      Fix a type cast bug in a retail sales pipeline. Prices are cast to int
+      instead of float causing all revenue totals to be wrong. One bug, one stage.
+    max_steps: 15
+    expected_score_range: [0.85, 1.0]
+    bugs:
+      - stage_2_wrong_type_cast
+    stages: 4
 
   - id: medium_silent_filter_bug
     difficulty: medium
-    description: Fix a silent date boundary bug with no error messages in a monthly report
-    max_steps: 18
-    expected_score_range: [0.50, 0.70]
+    description: >
+      Fix a silent date boundary bug in a monthly orders report pipeline.
+      Pipeline runs with NO errors but produces wrong output. Agent must
+      compare output vs expected carefully to find the off-by-one date filter.
+    max_steps: 20
+    expected_score_range: [0.50, 0.75]
+    bugs:
+      - stage_3_wrong_date_boundary
+    stages: 4
 
   - id: hard_cascade_bugs
     difficulty: hard
-    description: Fix 3 cascading bugs across 4 pipeline stages in correct order
-    max_steps: 25
+    description: >
+      Fix 4 cascading bugs in a logistics shipment pipeline. A wrong column
+      rename breaks a downstream join, the join key is incorrect causing NULL
+      regions, the distance threshold for domestic vs international is wrong,
+      and NULL values from the broken join are not handled. Must fix in order.
+    max_steps: 30
     expected_score_range: [0.20, 0.45]
+    bugs:
+      - stage_2_wrong_column_rename
+      - stage_3_wrong_join_key
+      - stage_4_wrong_threshold
+      - stage_4_null_handling
+    stages: 5
 
 observation_space:
   task_id: string
@@ -79,6 +102,12 @@ api:
     - method: GET
       path: /health
       description: Health check
+    - method: GET
+      path: /tasks
+      description: List all tasks with metadata
+    - method: GET
+      path: /openenv.yaml
+      description: Serve this spec file
 
 runtime:
   language: python
@@ -92,6 +121,7 @@ runtime:
     - openai>=1.0.0
     - pydantic>=2.0.0
     - pyyaml>=6.0
+    - numpy>=1.24.0
 
 huggingface:
   space_type: docker
